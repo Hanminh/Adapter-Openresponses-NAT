@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# The NAT workflow served behind the Open Responses /v1/responses endpoint.
+# Any NAT workflow config works — point server.py --config at your own if you prefer.
+
+general:
+  telemetry:
+    enabled: false
+    tracing:
+      phoenix:
+        _type: phoenix
+        endpoint: http://localhost:6006/v1/traces
+        project: agent_test
+
+functions:
+  current_datetime:
+    _type: current_datetime
+  wikipedia_search:
+    _type: wiki_search
+    max_results: 2
+
+llms:
+  nim_llm:
+    _type: nim
+    model_name: nvidia/nemotron-3-nano-30b-a3b
+    temperature: 0.0
+
+workflow:
+  _type: react_agent
+  llm_name: nim_llm
+  tool_names: [current_datetime, wikipedia_search]
+  verbose: true
+  parse_agent_response_max_retries: 3
