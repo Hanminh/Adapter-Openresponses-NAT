@@ -7,9 +7,9 @@ Run (adapter on :8001, nat serve on :8000):
         --nat-url http://localhost:8000/chat/stream --port 8001 --upload-dir /home/minhth11/Projects/Data_Upload
         
 python my_example/openresponses/run_filebridge.py \
-  --nat-url http://localhost:8000/chat/stream --port 8001 \
-  --upload-dir /home/minhth11/Projects/Data_Upload \
-  --owui-upload-dir /home/minhth11/Projects/API_UI/open-webui/.venv/lib/python3.13/site-packages/open_webui/data/uploads    
+    --nat-url http://localhost:8000/chat/stream --port 8001 \
+      --upload-dir /home/minhth11/Projects/Data_Upload \
+        --owui-upload-dir /home/minhth11/Projects/API_UI/open-webui/.venv/lib/python3.13/site-packages/open_webui/data/uploads    
 
 """
 
