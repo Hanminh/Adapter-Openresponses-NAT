@@ -61,6 +61,28 @@ def _bad_request(message: str, param: str | None = None) -> JSONResponse:
         "error": {"message": message, "type": "invalid_request", "param": param, "code": "invalid_request"}})
 
 
+def _conversation_id(request: Request, body: dict, *, fallback: str) -> str:
+    """Lấy conversation-id ỔN ĐỊNH của hội thoại để forward sang nat serve.
+
+    Ưu tiên header (Open WebUI thường gửi `conversation-id`), rồi các field trong body, cuối
+    cùng mới dùng `fallback` (response_id). Dùng response_id làm conversation-id là SAI vì nó đổi
+    mỗi lượt -> NAT coi mỗi lượt là hội thoại mới, mất memory/multi-turn.
+    """
+    meta = body.get("metadata") if isinstance(body.get("metadata"), dict) else {}
+    for cand in (
+        request.headers.get("conversation-id"),
+        request.headers.get("x-conversation-id"),
+        body.get("conversation_id"),
+        body.get("conversation"),
+        body.get("chat_id"),
+        meta.get("conversation_id"),
+        meta.get("chat_id"),
+    ):
+        if cand:
+            return str(cand)
+    return fallback
+
+
 def create_app(config: ThinkAdapterConfig) -> FastAPI:
     app = FastAPI(title="thinkbridge — Open Responses adapter → nat serve")
     parser = ThinkFrameParser(config)
@@ -115,6 +137,8 @@ def create_app(config: ThinkAdapterConfig) -> FastAPI:
         instructions = body.get("instructions")
         previous_response_id = body.get("previous_response_id")
         response_id = previous_response_id or f"resp_{uuid.uuid4().hex}"
+        # conversation-id ổn định để forward sang nat serve (KHÔNG dùng response_id — đổi mỗi lượt).
+        conversation_id = _conversation_id(request, body, fallback=response_id)
 
         if not user_text:
             return _bad_request("No user text or file found in `input`.", param="input")
@@ -123,7 +147,8 @@ def create_app(config: ThinkAdapterConfig) -> FastAPI:
             try:
                 obj = await translator.build_non_streaming_response(
                     config, parser, user_text, response_id=response_id, model=model, user_id=user_id,
-                    tools=tools, instructions=instructions, previous_response_id=previous_response_id)
+                    conversation_id=conversation_id, tools=tools, instructions=instructions,
+                    previous_response_id=previous_response_id)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("Non-streaming run failed")
                 return JSONResponse(status_code=500, content={
@@ -133,7 +158,8 @@ def create_app(config: ThinkAdapterConfig) -> FastAPI:
         return StreamingResponse(
             translator.stream_open_responses(
                 config, parser, user_text, response_id=response_id, model=model, user_id=user_id,
-                tools=tools, instructions=instructions, previous_response_id=previous_response_id),
+                conversation_id=conversation_id, tools=tools, instructions=instructions,
+                previous_response_id=previous_response_id),
             media_type="text/event-stream", headers=_SSE_HEADERS)
 
     # -- OpenAI-compatible --------------------------------------------------

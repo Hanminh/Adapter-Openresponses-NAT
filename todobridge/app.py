@@ -55,6 +55,29 @@ def _bad_request(message: str, param: str | None = None) -> JSONResponse:
         "error": {"message": message, "type": "invalid_request", "param": param, "code": "invalid_request"}})
 
 
+def _conversation_id(request: Request, body: dict, *, fallback: str) -> str:
+    """Lấy conversation-id ỔN ĐỊNH của hội thoại để forward sang nat serve.
+
+    Ưu tiên header (Open WebUI thường gửi `conversation-id`), rồi các field trong body, cuối
+    cùng mới dùng `fallback` (response_id — chỉ khi client KHÔNG gửi id hội thoại nào). Dùng
+    response_id làm conversation-id là SAI vì nó đổi mỗi lượt -> NAT coi mỗi lượt là hội thoại
+    mới, mất memory/multi-turn.
+    """
+    meta = body.get("metadata") if isinstance(body.get("metadata"), dict) else {}
+    for cand in (
+        request.headers.get("conversation-id"),
+        request.headers.get("x-conversation-id"),
+        body.get("conversation_id"),
+        body.get("conversation"),
+        body.get("chat_id"),
+        meta.get("conversation_id"),
+        meta.get("chat_id"),
+    ):
+        if cand:
+            return str(cand)
+    return fallback
+
+
 def create_app(config: TodoAdapterConfig) -> FastAPI:
     app = FastAPI(title="todobridge — write_todos boxes → nat serve")
     registry = UploadRegistry()
@@ -105,6 +128,9 @@ def create_app(config: TodoAdapterConfig) -> FastAPI:
         instructions = body.get("instructions")
         previous_response_id = body.get("previous_response_id")
         response_id = previous_response_id or f"resp_{uuid.uuid4().hex}"
+        # conversation-id để FORWARD sang nat serve: phải là id hội thoại ỔN ĐỊNH của Open WebUI,
+        # KHÔNG phải response_id (đổi mỗi lượt) — nếu không, memory/multi-turn của NAT sẽ hỏng.
+        conversation_id = _conversation_id(request, body, fallback=response_id)
 
         if not user_text:
             return _bad_request("No user text or file found in `input`.", param="input")
@@ -113,7 +139,8 @@ def create_app(config: TodoAdapterConfig) -> FastAPI:
             try:
                 obj = await translator.build_non_streaming_response(
                     config, user_text, response_id=response_id, model=model, user_id=user_id,
-                    tools=tools, instructions=instructions, previous_response_id=previous_response_id)
+                    conversation_id=conversation_id, tools=tools, instructions=instructions,
+                    previous_response_id=previous_response_id)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("Non-streaming run failed")
                 return JSONResponse(status_code=500, content={
@@ -123,7 +150,8 @@ def create_app(config: TodoAdapterConfig) -> FastAPI:
         return StreamingResponse(
             translator.stream_open_responses(
                 config, user_text, response_id=response_id, model=model, user_id=user_id,
-                tools=tools, instructions=instructions, previous_response_id=previous_response_id),
+                conversation_id=conversation_id, tools=tools, instructions=instructions,
+                previous_response_id=previous_response_id),
             media_type="text/event-stream", headers=_SSE_HEADERS)
 
     @app.get("/v1/models")

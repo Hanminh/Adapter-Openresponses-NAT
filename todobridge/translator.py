@@ -107,8 +107,8 @@ def _todos_from_step(obj: dict) -> list[dict] | None:
 # --------------------------------------------------------------------------- #
 async def stream_open_responses(config: TodoAdapterConfig, user_text: str, *, response_id: str,
                                 model: str, user_id: str | None, tools: list | None,
-                                instructions: str | None,
-                                previous_response_id: str | None) -> AsyncIterator[str]:
+                                instructions: str | None, previous_response_id: str | None,
+                                conversation_id: str | None = None) -> AsyncIterator[str]:
     em = TodoResponsesEmitter(response_id, model, tools=tools, instructions=instructions,
                               previous_response_id=previous_response_id,
                               step_payload_max=config.step_payload_max, max_steps=config.max_steps,
@@ -132,7 +132,7 @@ async def stream_open_responses(config: TodoAdapterConfig, user_text: str, *, re
     yield em.in_progress()
     try:
         async for kind, obj in call_chat_stream(config, user_text, user_id=user_id,
-                                                conversation_id=response_id):
+                                                conversation_id=conversation_id or response_id):
             if kind == "step":
                 todos = _todos_from_step(obj)
                 if todos is not None:
@@ -259,12 +259,14 @@ async def build_answer(config: TodoAdapterConfig, user_text: str, *, user_id: st
 async def build_non_streaming_response(config: TodoAdapterConfig, user_text: str, *,
                                        response_id: str, model: str, user_id: str | None,
                                        tools: list | None, instructions: str | None,
-                                       previous_response_id: str | None) -> dict:
+                                       previous_response_id: str | None,
+                                       conversation_id: str | None = None) -> dict:
     em = OpenResponsesEmitter(response_id, model, tools=tools, instructions=instructions,
                               previous_response_id=previous_response_id,
                               step_payload_max=config.step_payload_max, max_steps=config.max_steps,
                               reasoning_total_max=config.reasoning_total_max)
-    text = await build_answer(config, user_text, user_id=user_id, conversation_id=response_id)
+    text = await build_answer(config, user_text, user_id=user_id,
+                              conversation_id=conversation_id or response_id)
     em.open_message(f"msg_{uuid.uuid4().hex}")
     em.message_delta(text)
     em.close_message()
