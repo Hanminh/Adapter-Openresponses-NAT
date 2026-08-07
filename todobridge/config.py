@@ -39,13 +39,13 @@ class TodoAdapterConfig(FileAdapterConfig):
     # Lọc `<think>...</think>` khỏi ĐÁP ÁN (lưới an toàn; emitter thường đã lọc sẵn).
     strip_think_from_answer: bool = True
 
-    # --- HỘP THINKING lấp khoảng trễ TRƯỚC/SAU write_todos ---
-    # Với mọi intermediate step KHÔNG phải write_todos (LLM đang suy nghĩ, chạy bash, đọc kết
-    # quả...), gom vào một hộp "Thinking" (reasoning). Nhờ đó khoảng trễ trước khi write_todos
-    # đầu tiên xuất hiện và sau khi write_todos cuối hoàn tất KHÔNG còn "đứng hình".
+    # --- HAI HỘP THINKING lấp khoảng trễ: 1 ở ĐẦU (trước write_todos), 1 ở CUỐI (sau khi mọi
+    #     todo completed, trước đáp án). CHỈ hiện chỉ báo "Thinking", KHÔNG in nội dung thought,
+    #     và KHÔNG có hộp thinking xen giữa các bước write_todos.
     show_thinking: bool = True
-    # Cắt phần sau "Final Answer:" khỏi hộp thinking (đáp án đã stream riêng qua data:).
-    strip_final_answer_from_thinking: bool = True
+    # Nhãn hiển thị trong hộp thinking. Mặc định RỖNG -> chỉ hiện chỉ báo "Thinking" của Open WebUI
+    # (không nội dung). Đặt chuỗi nếu muốn một nhãn trạng thái (vd "Đang xử lý…").
+    thinking_label: str = ""
 
     # --- KIỂU HIỂN THỊ DANH SÁCH TODO ---
     # False (mặc định): mở box khi todo chuyển `in_progress`, hoàn tất khi `completed` -> các box
