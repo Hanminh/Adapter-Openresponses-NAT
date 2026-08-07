@@ -23,7 +23,7 @@ from collections.abc import AsyncIterator
 from natbridge.nat_client import call_chat_stream
 from natbridge.open_responses import OpenResponsesEmitter
 
-from thinkbridge.frames import ThinkStripper   # tái dùng bộ lọc <think>
+from thinkbridge.frames import ThinkFrameParser, ThinkStripper   # tái dùng lọc <think> + parse thinking
 
 from todobridge.config import TodoAdapterConfig
 from todobridge.frames import (
@@ -102,6 +102,22 @@ def _todos_from_step(obj: dict) -> list[dict] | None:
     return parse_todo_step(obj)
 
 
+def _thinking_text(parser: ThinkFrameParser, step: dict) -> str | None:
+    """Nội dung 'thinking' cho một step KHÔNG phải write_todos (lấp khoảng trễ).
+
+    - Tool khác (bash/execute...) -> dòng gọn `🔧 <tên tool>`.
+    - Bước LLM -> phần `**Output:**` (suy nghĩ của model), bỏ đáp án cuối.
+    - Nhiễu (input-only / wrapper nội bộ) -> None.
+    """
+    name = step.get("name") or ""
+    if parser.is_noise(name):
+        return None
+    if parser.is_tool(name):                        # tool khác write_todos (đã lọc trước)
+        tname, _args, _res = parser.parse_tool(step)
+        return f"🔧 {tname}"
+    return parser.thinking_text(step)
+
+
 # --------------------------------------------------------------------------- #
 # /v1/responses — mỗi todo là một box (function_call + function_call_output)
 # --------------------------------------------------------------------------- #
@@ -114,18 +130,42 @@ async def stream_open_responses(config: TodoAdapterConfig, user_text: str, *, re
                               step_payload_max=config.step_payload_max, max_steps=config.max_steps,
                               reasoning_total_max=config.reasoning_total_max)
     tracker = TodoBoxTracker()
+    parser = ThinkFrameParser(config)
     strip = ThinkStripper() if config.strip_think_from_answer else None
     msg_id = f"msg_{uuid.uuid4().hex}"
     msg_open = False
     got_answer = False
+    reasoning_open = False
 
     def emit_events(events) -> list[str]:
         frames: list[str] = []
         for kind, content, call_id, status in events:
-            if kind == "open":                       # in_progress / pending -> box ĐANG CHẠY
+            if kind == "open":                       # in_progress -> box ĐANG CHẠY
                 frames += em.open_todo_box(call_id, content, status)
             elif kind == "complete":                 # completed -> box ĐÃ HOÀN THÀNH
                 frames += em.complete_todo_box(call_id, config.completed_result)
+        return frames
+
+    def close_reasoning() -> list[str]:
+        nonlocal reasoning_open
+        if not reasoning_open:
+            return []
+        reasoning_open = False
+        f = em.close_reasoning()
+        return [f] if f else []
+
+    def add_thinking(text: str | None) -> list[str]:
+        """Mở/nối một hộp Thinking (reasoning) cho hoạt động không phải write_todos."""
+        nonlocal reasoning_open
+        if not config.show_thinking or not text:
+            return []
+        frames: list[str] = []
+        if not reasoning_open:
+            frames.append(em.open_reasoning(f"rs_{uuid.uuid4().hex}"))
+            reasoning_open = True
+        d = em.reasoning_delta(text.strip() + "\n")
+        if d:
+            frames.append(d)
         return frames
 
     yield em.created()
@@ -136,9 +176,14 @@ async def stream_open_responses(config: TodoAdapterConfig, user_text: str, *, re
             if kind == "step":
                 todos = _todos_from_step(obj)
                 if todos is not None:
-                    for f in emit_events(tracker.update(todos)):
+                    for f in close_reasoning():       # đóng hộp Thinking TRƯỚC khi mở box todo
                         yield f
-                continue                              # step KHÁC write_todos -> bỏ qua
+                    for f in emit_events(tracker.update(todos, open_pending=config.todo_show_pending)):
+                        yield f
+                else:                                 # step khác -> vào hộp Thinking (lấp khoảng trễ)
+                    for f in add_thinking(_thinking_text(parser, obj)):
+                        yield f
+                continue
 
             # kind == "token" -> đáp án
             text = _token_text(obj)
@@ -148,6 +193,8 @@ async def stream_open_responses(config: TodoAdapterConfig, user_text: str, *, re
                 text = strip.feed(text)
                 if not text:
                     continue
+            for f in close_reasoning():               # đáp án bắt đầu -> đóng Thinking
+                yield f
             if not msg_open:
                 for f in em.open_message(msg_id):
                     yield f
@@ -164,6 +211,8 @@ async def stream_open_responses(config: TodoAdapterConfig, user_text: str, *, re
         if config.complete_open_boxes_on_end:
             for f in emit_events(tracker.pending_completions()):
                 yield f
+        for f in close_reasoning():
+            yield f
 
         if msg_open:
             for f in em.close_message():
@@ -206,6 +255,7 @@ async def stream_openai(config: TodoAdapterConfig, user_text: str, *, model: str
                         user_id: str | None, conversation_id: str | None) -> AsyncIterator[str]:
     chat_id = f"chatcmpl-{uuid.uuid4().hex}"
     tracker = TodoBoxTracker()
+    parser = ThinkFrameParser(config)
     strip = ThinkStripper() if config.strip_think_from_answer else None
     yield _openai_chunk(chat_id, model, role="assistant")
     try:
@@ -214,9 +264,14 @@ async def stream_openai(config: TodoAdapterConfig, user_text: str, *, model: str
             if kind == "step":
                 todos = _todos_from_step(obj)
                 if todos is not None:
-                    for ev_kind, content, _cid, status in tracker.update(todos):
+                    for ev_kind, content, _cid, status in tracker.update(
+                            todos, open_pending=config.todo_show_pending):
                         icon = "✅" if ev_kind == "complete" else status_icon(status)
                         yield _openai_chunk(chat_id, model, reasoning_content=f"{icon} {content}\n")
+                elif config.show_thinking:            # step khác -> thinking (lấp khoảng trễ)
+                    th = _thinking_text(parser, obj)
+                    if th:
+                        yield _openai_chunk(chat_id, model, reasoning_content=th.strip() + "\n")
                 continue
             text = _token_text(obj)
             if not text or not config.show_answer:

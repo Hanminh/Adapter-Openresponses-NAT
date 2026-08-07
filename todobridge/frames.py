@@ -138,7 +138,13 @@ class TodoBoxTracker:
 
     _boxes: dict[str, _Box] = field(default_factory=dict)
 
-    def update(self, todos: list[dict]) -> list[BoxEvent]:
+    def update(self, todos: list[dict], *, open_pending: bool = False) -> list[BoxEvent]:
+        """Sinh sự kiện box từ một snapshot todos.
+
+        `open_pending=False` (mặc định): CHỈ mở box khi todo đã `in_progress`/`completed` -> các
+        box xuất hiện TUẦN TỰ (không mở loạt box `pending` cùng lúc), tránh Open WebUI gộp nhóm.
+        `open_pending=True`: mở box ngay cả khi `pending` (hiện đủ kế hoạch từ đầu).
+        """
         events: list[BoxEvent] = []
         for t in todos:
             content = str(t.get("content", "")).strip()
@@ -147,6 +153,9 @@ class TodoBoxTracker:
             status = str(t.get("status", "pending"))
             box = self._boxes.get(content)
             if box is None:
+                should_open = status in ("in_progress", "completed") or open_pending
+                if not should_open:
+                    continue                      # pending & chưa tới lượt -> chưa mở
                 box = _Box(call_id=f"todo_{uuid.uuid4().hex[:12]}", status=status)
                 self._boxes[content] = box
                 events.append(("open", content, box.call_id, status))
