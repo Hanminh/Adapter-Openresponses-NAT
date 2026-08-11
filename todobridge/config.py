@@ -43,9 +43,11 @@ class TodoAdapterConfig(FileAdapterConfig):
     #     todo completed, trước đáp án). CHỈ hiện chỉ báo "Thinking", KHÔNG in nội dung thought,
     #     và KHÔNG có hộp thinking xen giữa các bước write_todos.
     show_thinking: bool = True
-    # Nhãn hiển thị trong hộp thinking. Mặc định RỖNG -> chỉ hiện chỉ báo "Thinking" của Open WebUI
-    # (không nội dung). Đặt chuỗi nếu muốn một nhãn trạng thái (vd "Đang xử lý…").
-    thinking_label: str = ""
+    # Nhãn (nội dung summary) của MỖI hộp thinking. PHẢI khác rỗng thì Open WebUI mới render hộp:
+    # reasoning item rỗng (không có `reasoning_summary_text.delta`) thường KHÔNG hiện thành hộp nào.
+    # Mặc định "Thinking" -> cả hộp ĐẦU (trước todo) lẫn hộp CUỐI (sau khi mọi todo xong) đều hiện
+    # cùng một nhãn "Thinking". Đổi chuỗi nếu muốn nhãn khác (vd "Đang xử lý…").
+    thinking_label: str = "Thinking"
 
     # --- KIỂU HIỂN THỊ DANH SÁCH TODO ---
     # False (mặc định): mở box khi todo chuyển `in_progress`, hoàn tất khi `completed` -> các box
