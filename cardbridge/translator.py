@@ -136,6 +136,8 @@ async def stream_open_responses(config: CardAdapterConfig, user_text: str, *, re
                     if text in seen_script_payloads:
                         continue                      # cùng nội dung -> chỉ MỘT item duy nhất
                     seen_script_payloads.add(text)
+                    logger.info("cardbridge: phát item '%s' (%d ký tự JSON) từ step '%s'",
+                                config.script_output_type, len(text), config.script_step_marker)
                     for f in em.emit_script_output(text, name=config.script_output_name,
                                                    item_type=config.script_output_type,
                                                    text_max=config.script_payload_max):
