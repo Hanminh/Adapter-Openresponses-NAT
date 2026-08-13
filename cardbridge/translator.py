@@ -46,15 +46,33 @@ logger = logging.getLogger("cardbridge.translator")
 class CardResponsesEmitter(TodoResponsesEmitter):
     """TodoResponsesEmitter + item `script_output` cho output của script passthrough."""
 
-    def emit_script_output(self, text: str, *, name: str, item_type: str) -> list[str]:
+    def emit_script_output(self, text: str, *, name: str, item_type: str,
+                           text_max: int = 0) -> list[str]:
+        """Phát ĐÚNG MỘT item mang TOÀN BỘ output của script.
+
+        Item chứa:
+          * `data`  : list object JSON đã parse (nếu output là JSON hợp lệ) — KHÔNG bao giờ cắt.
+          * `output`: [{type:output_text, text:<chuỗi thô>}] — cắt theo `text_max` nếu >0 (0 = full).
+        """
+        parsed = None
+        try:
+            parsed = json.loads(text)
+        except Exception:  # noqa: BLE001 - vẫn phát item text-only nếu không phải JSON
+            parsed = None
+
+        raw_text = text[:text_max] if (text_max and text_max > 0) else text
+
         idx = len(self._output)
         item = {
             "id": f"so_{uuid.uuid4().hex}",
             "type": item_type,          # vd "script_output" -> client key theo đây
             "status": "completed",
             "name": name,               # vd "package_details"
-            "output": [{"type": "output_text", "text": text}],
+            "format": "json" if parsed is not None else "text",
+            "output": [{"type": "output_text", "text": raw_text}],
         }
+        if parsed is not None:
+            item["data"] = parsed        # TOÀN BỘ list object JSON (không cắt)
         self._output.append(item)
         return [
             self._frame("response.output_item.added", {"output_index": idx, "item": item}),
@@ -92,6 +110,7 @@ async def stream_open_responses(config: CardAdapterConfig, user_text: str, *, re
     msg_id = f"msg_{uuid.uuid4().hex}"
     msg_open = False
     got_answer = False
+    seen_script_ids: set[str] = set()   # dedup: TOOL_START + TOOL_END cùng UUID -> chỉ 1 item
 
     def emit_todo_events(events) -> list[str]:
         frames: list[str] = []
@@ -112,11 +131,14 @@ async def stream_open_responses(config: CardAdapterConfig, user_text: str, *, re
                 if info is None:
                     continue                          # step khác -> BỎ QUA (không thinking chen giữa)
                 if info[0] == "script":
-                    text = info[1]
-                    if config.script_payload_max:
-                        text = text[: config.script_payload_max]
-                    for f in em.emit_script_output(text, name=config.script_output_name,
-                                                   item_type=config.script_output_type):
+                    sid = str(obj.get("id") or "")
+                    if sid and sid in seen_script_ids:
+                        continue                      # đã phát item cho step này (START/END trùng UUID)
+                    if sid:
+                        seen_script_ids.add(sid)
+                    for f in em.emit_script_output(info[1], name=config.script_output_name,
+                                                   item_type=config.script_output_type,
+                                                   text_max=config.script_payload_max):
                         yield f
                     continue
                 # info[0] == "todo"

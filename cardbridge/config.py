@@ -28,5 +28,6 @@ class CardAdapterConfig(TodoAdapterConfig):
     script_output_type: str = "script_output"
     # `name` gắn kèm item (để client biết là gói cước).
     script_output_name: str = "package_details"
-    # Giới hạn ký tự payload script gửi client (list JSON gói có thể vài KB) — để RỘNG, tránh cắt.
-    script_payload_max: int = 200_000
+    # Giới hạn ký tự phần TEXT thô của item script. 0 = KHÔNG cắt (mặc định) -> item luôn chứa
+    # TOÀN BỘ output của script. Trường `data` (list object JSON đã parse) KHÔNG bao giờ bị cắt.
+    script_payload_max: int = 0
