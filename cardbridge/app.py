@@ -185,7 +185,9 @@ def create_app(config: CardAdapterConfig) -> FastAPI:
     async def health():
         return {"status": "healthy", "bridge": "cardbridge",
                 "nat_chat_stream_url": config.nat_chat_stream_url,
-                "rule": "step write_todos -> box | step package_details -> item script_output | token -> answer"}
+                "script_output_type": config.script_output_type,
+                "rule": f"step write_todos -> box | step {config.script_step_marker} -> item "
+                        f"{config.script_output_type} | token -> answer"}
 
     return app
 
@@ -202,8 +204,8 @@ def build_config_from_args(argv: list[str] | None = None) -> tuple[CardAdapterCo
     ap.add_argument("--owui-upload-dir", default=None)
     ap.add_argument("--keep-rag-context", action="store_true")
     ap.add_argument("--hide-answer", action="store_true", help="Chỉ hiện box/item, KHÔNG hiện đáp án")
-    ap.add_argument("--script-output-type", default="script_output",
-                    help="`type` của item output script gửi client (mặc định script_output)")
+    ap.add_argument("--script-output-type", default="ui_package_list",
+                    help="`type` của item output script gửi client (mặc định ui_package_list)")
     ap.add_argument("--script-output-name", default="package_details",
                     help="`name` gắn kèm item output script (mặc định package_details)")
     args = ap.parse_args(argv)

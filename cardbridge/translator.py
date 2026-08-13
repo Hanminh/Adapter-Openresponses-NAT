@@ -110,7 +110,8 @@ async def stream_open_responses(config: CardAdapterConfig, user_text: str, *, re
     msg_id = f"msg_{uuid.uuid4().hex}"
     msg_open = False
     got_answer = False
-    seen_script_ids: set[str] = set()   # dedup: TOOL_START + TOOL_END cùng UUID -> chỉ 1 item
+    # dedup theo NỘI DUNG: gộp TOOL_START+TOOL_END (cùng JSON) và cả primary(push)+fallback(custom).
+    seen_script_payloads: set[str] = set()
 
     def emit_todo_events(events) -> list[str]:
         frames: list[str] = []
@@ -131,12 +132,11 @@ async def stream_open_responses(config: CardAdapterConfig, user_text: str, *, re
                 if info is None:
                     continue                          # step khác -> BỎ QUA (không thinking chen giữa)
                 if info[0] == "script":
-                    sid = str(obj.get("id") or "")
-                    if sid and sid in seen_script_ids:
-                        continue                      # đã phát item cho step này (START/END trùng UUID)
-                    if sid:
-                        seen_script_ids.add(sid)
-                    for f in em.emit_script_output(info[1], name=config.script_output_name,
+                    text = info[1]
+                    if text in seen_script_payloads:
+                        continue                      # cùng nội dung -> chỉ MỘT item duy nhất
+                    seen_script_payloads.add(text)
+                    for f in em.emit_script_output(text, name=config.script_output_name,
                                                    item_type=config.script_output_type,
                                                    text_max=config.script_payload_max):
                         yield f

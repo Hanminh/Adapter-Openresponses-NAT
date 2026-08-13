@@ -22,10 +22,11 @@ class CardAdapterConfig(TodoAdapterConfig):
     show_thinking: bool = False
 
     # --- Item output của script passthrough ---
-    # Tên step (khớp SCRIPT_OUTPUT_NAME phía workflow) để nhận diện output script.
-    script_step_marker: str = "package_details"
+    # Tên step JSON phía workflow (khớp SCRIPT_STEP_NAME của tool_passthrough). PHẢI khác tên tool
+    # `send_package_details` để bridge KHÔNG tóm nhầm step "lời gọi tool" (Input = args).
+    script_step_marker: str = "package_details_payload"
     # `type` của item gửi client -> client key theo đây để tách khỏi câu trả lời.
-    script_output_type: str = "script_output"
+    script_output_type: str = "ui_package_list"
     # `name` gắn kèm item (để client biết là gói cước).
     script_output_name: str = "package_details"
     # Giới hạn ký tự phần TEXT thô của item script. 0 = KHÔNG cắt (mặc định) -> item luôn chứa

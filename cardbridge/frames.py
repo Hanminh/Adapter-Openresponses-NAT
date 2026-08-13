@@ -26,8 +26,9 @@ from todobridge.frames import (  # noqa: F401  (re-export cho translator)
     step_name,
 )
 
-# Tên step script mặc định (khớp SCRIPT_OUTPUT_NAME phía workflow / tool_passthrough).
-SCRIPT_STEP_MARKER = "package_details"
+# Tên step JSON mặc định (khớp SCRIPT_STEP_NAME phía workflow / tool_passthrough).
+# PHẢI khác tên tool `send_package_details` — nếu không sẽ khớp nhầm step "lời gọi tool".
+SCRIPT_STEP_MARKER = "package_details_payload"
 
 # Bóc khối trong step payload. NAT StepAdaptor render `data.input`/`data.output` trong code fence.
 _INPUT_RE = re.compile(r"\*\*Input:\*\*\s*```[a-zA-Z]*\n?(.*?)```", re.DOTALL)
@@ -35,8 +36,15 @@ _OUTPUT_RE = re.compile(r"\*\*Output:\*\*\s*```[a-zA-Z]*\n?(.*?)```", re.DOTALL)
 
 
 def is_script_step(name: str, marker: str = SCRIPT_STEP_MARKER) -> bool:
-    """True nếu step là output của script passthrough (vd 'Tool: package_details')."""
-    return bool(marker) and marker in (name or "")
+    """True nếu step là output script passthrough — KHỚP CHÍNH XÁC theo tên step.
+
+    Front-end NAT đặt name = "Tool: <step_name>". Ta so khớp phần sau "Tool: " BẰNG marker (không
+    dùng substring) để `send_package_details` (lời gọi tool) KHÔNG bị nhận nhầm là step JSON.
+    """
+    if not marker or not name:
+        return False
+    bare = name[len("Tool: "):] if name.startswith("Tool: ") else name
+    return bare.strip() == marker
 
 
 def parse_script_step(step: dict) -> str | None:
