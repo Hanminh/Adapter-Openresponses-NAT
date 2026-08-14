@@ -204,8 +204,8 @@ def build_config_from_args(argv: list[str] | None = None) -> tuple[CardAdapterCo
     ap.add_argument("--owui-upload-dir", default=None)
     ap.add_argument("--keep-rag-context", action="store_true")
     ap.add_argument("--hide-answer", action="store_true", help="Chỉ hiện box/item, KHÔNG hiện đáp án")
-    ap.add_argument("--script-output-type", default="ui_package_list",
-                    help="`type` của item output script gửi client (mặc định ui_package_list)")
+    ap.add_argument("--script-output-type", default="carousel",
+                    help="`type` của item output script gửi client (mặc định carousel)")
     ap.add_argument("--script-output-name", default="package_details",
                     help="`name` gắn kèm item output script (mặc định package_details)")
     args = ap.parse_args(argv)

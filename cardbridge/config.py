@@ -26,7 +26,7 @@ class CardAdapterConfig(TodoAdapterConfig):
     # `send_package_details` để bridge KHÔNG tóm nhầm step "lời gọi tool" (Input = args).
     script_step_marker: str = "package_details_payload"
     # `type` của item gửi client -> client key theo đây để tách khỏi câu trả lời.
-    script_output_type: str = "ui_package_list"
+    script_output_type: str = "carousel"
     # `name` gắn kèm item (để client biết là gói cước).
     script_output_name: str = "package_details"
     # Giới hạn ký tự phần TEXT thô của item script. 0 = KHÔNG cắt (mặc định) -> item luôn chứa
